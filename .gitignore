@@ -1,0 +1,98 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ChromaDB
+chroma_db/
+*.db
+*.sqlite
+
+# Uploads and temporary files
+uploads/
+temp/
+tmp/
+*.tmp
+*.temp
+
+# Logs
+logs/
+*.log
+
+# PDF files (add your test PDFs to a separate folder)
+*.pdf
+
+# Environment variables
+.env.local
+.env.production
+.env.development
+
+# FastAPI
+.pytest_cache/
+
+# Docker
+.dockerignore
+
+# Model files and caches
+models/
+.cache/
+.huggingface/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# pytest
+.pytest_cache/

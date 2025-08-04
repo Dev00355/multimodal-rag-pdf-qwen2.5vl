@@ -1,0 +1,99 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multimodal-rag-qwen"
+version = "1.0.0"
+description = "A multimodal RAG system for PDFs with text and images using Qwen2.5-VL"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"},
+]
+keywords = ["rag", "multimodal", "pdf", "qwen", "ollama", "langchain", "chromadb"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "langchain>=0.1.0",
+    "langchain-community>=0.0.10",
+    "langchain-chroma>=0.1.0",
+    "chromadb>=0.4.18",
+    "ollama>=0.1.7",
+    "pypdf2>=3.0.1",
+    "pymupdf>=1.23.8",
+    "pillow>=10.1.0",
+    "python-multipart>=0.0.6",
+    "pydantic>=2.5.0",
+    "numpy>=1.24.3",
+    "aiofiles>=23.2.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/multimodal-rag-qwen"
+Documentation = "https://github.com/yourusername/multimodal-rag-qwen#readme"
+Repository = "https://github.com/yourusername/multimodal-rag-qwen"
+Issues = "https://github.com/yourusername/multimodal-rag-qwen/issues"
+
+[project.scripts]
+multimodal-rag = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*.py"]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+asyncio_mode = "auto"
