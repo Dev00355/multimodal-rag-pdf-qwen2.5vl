@@ -76,11 +76,23 @@ class VectorStore:
             
             # Enhance metadata with spatial information
             enhanced_metadata = {
-                **metadata, 
+                **{k: v for k, v in metadata.items() if k != "bbox"},  # Exclude bbox list
                 "type": "text",
                 "has_bbox": "bbox" in metadata and metadata["bbox"] is not None,
                 "area": metadata.get("area", 0)
             }
+            
+            # Convert bbox to individual scalar values if present
+            if "bbox" in metadata and metadata["bbox"] is not None:
+                bbox = metadata["bbox"]
+                enhanced_metadata.update({
+                    "bbox_x0": float(bbox[0]),
+                    "bbox_y0": float(bbox[1]),
+                    "bbox_x1": float(bbox[2]),
+                    "bbox_y1": float(bbox[3]),
+                    "bbox_width": float(bbox[2] - bbox[0]),
+                    "bbox_height": float(bbox[3] - bbox[1])
+                })
             
             # Add to collection
             self.collection.add(
@@ -119,14 +131,34 @@ class VectorStore:
             
             # Store image data in metadata with spatial information
             image_metadata = {
-                **metadata,
+                **{k: v for k, v in metadata.items() if k not in ["bbox", "dimensions"]},  # Exclude list values
                 "type": "image",
                 "image_data": image_base64,
                 "description": image_description,
                 "has_bbox": "bbox" in metadata and metadata["bbox"] is not None,
-                "area": metadata.get("area", 0),
-                "dimensions": metadata.get("dimensions", [])
+                "area": metadata.get("area", 0)
             }
+            
+            # Convert bbox to individual scalar values if present
+            if "bbox" in metadata and metadata["bbox"] is not None:
+                bbox = metadata["bbox"]
+                image_metadata.update({
+                    "bbox_x0": float(bbox[0]),
+                    "bbox_y0": float(bbox[1]),
+                    "bbox_x1": float(bbox[2]),
+                    "bbox_y1": float(bbox[3]),
+                    "bbox_width": float(bbox[2] - bbox[0]),
+                    "bbox_height": float(bbox[3] - bbox[1])
+                })
+            
+            # Convert dimensions to individual scalar values if present
+            if "dimensions" in metadata and metadata["dimensions"]:
+                dims = metadata["dimensions"]
+                if len(dims) >= 2:
+                    image_metadata.update({
+                        "image_width": int(dims[0]),
+                        "image_height": int(dims[1])
+                    })
             
             # Add to collection (store description as document for search)
             self.collection.add(
@@ -251,9 +283,8 @@ class VectorStore:
         """
         boost = 0.0
         current_page = metadata.get('page')
-        current_bbox = metadata.get('bbox')
         
-        if not current_page or not current_bbox:
+        if not current_page:
             return boost
         
         # Boost for same-page content
@@ -293,20 +324,19 @@ class VectorStore:
             }
             
             # Add bounding box info if available
-            if metadata.get('bbox'):
-                bbox = metadata['bbox']
+            if metadata.get('has_bbox') and all(k in metadata for k in ['bbox_x0', 'bbox_y0', 'bbox_x1', 'bbox_y1']):
                 spatial_context.update({
                     'coordinates': {
-                        'top_left': [bbox[0], bbox[1]],
-                        'bottom_right': [bbox[2], bbox[3]],
-                        'width': bbox[2] - bbox[0],
-                        'height': bbox[3] - bbox[1]
+                        'top_left': [metadata['bbox_x0'], metadata['bbox_y0']],
+                        'bottom_right': [metadata['bbox_x1'], metadata['bbox_y1']],
+                        'width': metadata['bbox_width'],
+                        'height': metadata['bbox_height']
                     }
                 })
             
             # Add image dimensions if available
-            if metadata.get('dimensions'):
-                spatial_context['image_dimensions'] = metadata['dimensions']
+            if metadata.get('image_width') and metadata.get('image_height'):
+                spatial_context['image_dimensions'] = [metadata['image_width'], metadata['image_height']]
             
             result['spatial_context'] = spatial_context
         
