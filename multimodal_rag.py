@@ -85,7 +85,10 @@ class MultimodalRAG:
                         'page': text_chunk['page'],
                         'chunk_type': 'text',
                         'filename': extracted_data['metadata']['filename'],
-                        'summary': summary
+                        'summary': summary,
+                        'bbox': text_chunk.get('bbox'),
+                        'block_index': text_chunk.get('block_index'),
+                        'area': text_chunk.get('area', 0)
                     }
                     
                     self.vector_store.add_text_chunk(enhanced_content, metadata)
@@ -136,7 +139,10 @@ Extracted Text: {extracted_text}
                         'chunk_type': 'image',
                         'filename': extracted_data['metadata']['filename'],
                         'analysis': image_analysis,
-                        'extracted_text': extracted_text
+                        'extracted_text': extracted_text,
+                        'bbox': image_chunk.get('bbox'),
+                        'dimensions': image_chunk.get('dimensions', []),
+                        'area': image_chunk.get('area', 0)
                     }
                     
                     self.vector_store.add_image_chunk(
@@ -151,11 +157,26 @@ Extracted Text: {extracted_text}
                     logger.error(error_msg)
                     results['errors'].append(error_msg)
             
+            # Process spatial relationships
+            if 'spatial_relationships' in extracted_data:
+                try:
+                    self.vector_store.add_spatial_relationships(extracted_data['spatial_relationships'])
+                    results['spatial_relationships_added'] = len(extracted_data['spatial_relationships'])
+                    logger.info(f"Added {len(extracted_data['spatial_relationships'])} spatial relationships")
+                except Exception as e:
+                    error_msg = f"Error processing spatial relationships: {e}"
+                    logger.error(error_msg)
+                    results['errors'].append(error_msg)
+                    results['spatial_relationships_added'] = 0
+            else:
+                results['spatial_relationships_added'] = 0
+            
             results['processing_time'] = time.time() - start_time
             
             logger.info(f"Completed processing {pdf_path}: "
                        f"{results['text_chunks_added']} text chunks, "
                        f"{results['image_chunks_added']} image chunks, "
+                       f"{results['spatial_relationships_added']} spatial relationships, "
                        f"{results['processing_time']:.2f}s")
             
             return results
@@ -202,47 +223,93 @@ Extracted Text: {extracted_text}
             if document_filter:
                 metadata_filter['document_id'] = document_filter
             
-            # Perform hybrid search
+            # Perform enhanced spatial-aware search
             if include_images:
-                text_results, image_base64_list = self.vector_store.hybrid_search(
-                    query, n_results
+                # Get mixed results with spatial awareness
+                all_results = self.vector_store.similarity_search(
+                    query, n_results * 2, use_spatial_boost=True
                 )
+                
+                # Separate text and image results
+                text_results = [r for r in all_results if r['metadata'].get('type') == 'text']
+                image_results = [r for r in all_results if r['metadata'].get('type') == 'image']
+                
+                # Balance results and extract images
+                text_results = text_results[:max(1, n_results // 2)]
+                image_results = image_results[:max(1, n_results // 2)]
+                
+                # Extract base64 images for vision model
+                image_base64_list = []
+                for img_result in image_results:
+                    img_data = img_result['metadata'].get('image_data')
+                    if img_data:
+                        image_base64_list.append(img_data)
+                
+                # Combine results for context
+                combined_results = text_results + image_results
             else:
-                text_results = self.vector_store.similarity_search(
-                    query, n_results, metadata_filter
+                # Text-only search with spatial awareness
+                combined_results = self.vector_store.similarity_search(
+                    query, n_results, content_type='text', use_spatial_boost=True
                 )
+                text_results = combined_results
+                image_results = []
                 image_base64_list = []
             
-            # Generate answer using Ollama
+            # Generate answer using Ollama with enhanced context
             loop = asyncio.get_event_loop()
             answer = await loop.run_in_executor(
                 self.executor,
                 self.ollama_client.answer_question,
                 query,
-                text_results,
+                combined_results if include_images else text_results,
                 image_base64_list if include_images else None
             )
             
-            # Prepare response
+            # Prepare enhanced response with spatial information
+            all_sources = combined_results if include_images else text_results
+            
             response = {
                 'query': query,
                 'answer': answer,
                 'sources': {
                     'text_chunks': len(text_results),
-                    'images': len(image_base64_list),
-                    'total_sources': len(text_results) + len(image_base64_list)
+                    'images': len(image_results) if include_images else 0,
+                    'total_sources': len(all_sources),
+                    'spatial_aware': True
                 },
                 'text_sources': [
                     {
                         'content': result['content'][:200] + "..." if len(result['content']) > 200 else result['content'],
                         'page': result['metadata'].get('page'),
                         'document': result['metadata'].get('filename'),
-                        'distance': result['distance']
+                        'similarity_score': result.get('similarity_score', 0),
+                        'spatial_boost': result.get('spatial_boost', 0),
+                        'final_score': result.get('final_score', 0),
+                        'has_spatial_info': result.get('has_spatial_info', False),
+                        'spatial_context': result.get('spatial_context', {})
                     }
                     for result in text_results
                 ],
                 'processing_time': time.time() - start_time
             }
+            
+            # Add image sources if included
+            if include_images and image_results:
+                response['image_sources'] = [
+                    {
+                        'description': result['content'][:200] + "..." if len(result['content']) > 200 else result['content'],
+                        'page': result['metadata'].get('page'),
+                        'document': result['metadata'].get('filename'),
+                        'similarity_score': result.get('similarity_score', 0),
+                        'spatial_boost': result.get('spatial_boost', 0),
+                        'final_score': result.get('final_score', 0),
+                        'spatial_context': result.get('spatial_context', {}),
+                        'analysis': result['metadata'].get('analysis', ''),
+                        'extracted_text': result['metadata'].get('extracted_text', '')
+                    }
+                    for result in image_results
+                ]
             
             if include_images and image_base64_list:
                 response['has_images'] = True

@@ -56,6 +56,7 @@ class UploadResponse(BaseModel):
     total_pages: int
     text_chunks_added: int
     image_chunks_added: int
+    spatial_relationships_added: int
     processing_time: float
     errors: List[str]
 
@@ -201,6 +202,7 @@ async def upload_pdf(
                 total_pages=0,  # Will be updated when processing completes
                 text_chunks_added=0,
                 image_chunks_added=0,
+                spatial_relationships_added=0,
                 processing_time=0.0,
                 errors=[]
             )
@@ -219,6 +221,7 @@ async def upload_pdf(
                 total_pages=result['total_pages'],
                 text_chunks_added=result['text_chunks_added'],
                 image_chunks_added=result['image_chunks_added'],
+                spatial_relationships_added=result.get('spatial_relationships_added', 0),
                 processing_time=result['processing_time'],
                 errors=result['errors']
             )

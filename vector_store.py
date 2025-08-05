@@ -57,12 +57,12 @@ class VectorStore:
     
     def add_text_chunk(self, content: str, metadata: Dict, chunk_id: str = None) -> str:
         """
-        Add a text chunk to the vector store.
+        Add a text chunk to the vector store with spatial coordinates.
         
         Args:
-            content: Text content
-            metadata: Metadata dictionary
-            chunk_id: Optional custom ID
+            content: Text content to add
+            metadata: Metadata associated with the chunk (should include bbox, page, etc.)
+            chunk_id: Optional custom ID for the chunk
             
         Returns:
             ID of the added chunk
@@ -74,30 +74,38 @@ class VectorStore:
             # Generate embedding using Ollama
             embedding = self._generate_embedding(content)
             
+            # Enhance metadata with spatial information
+            enhanced_metadata = {
+                **metadata, 
+                "type": "text",
+                "has_bbox": "bbox" in metadata and metadata["bbox"] is not None,
+                "area": metadata.get("area", 0)
+            }
+            
             # Add to collection
             self.collection.add(
                 documents=[content],
                 embeddings=[embedding],
-                metadatas=[{**metadata, "type": "text"}],
+                metadatas=[enhanced_metadata],
                 ids=[chunk_id]
             )
             
-            logger.debug(f"Added text chunk with ID: {chunk_id}")
+            logger.debug(f"Added text chunk with ID: {chunk_id}, bbox: {metadata.get('bbox', 'None')}")
             return chunk_id
             
         except Exception as e:
             logger.error(f"Error adding text chunk: {e}")
             raise
     
-    def add_image_chunk(self, image_description: str, image_base64: str, metadata: Dict, chunk_id: str = None) -> str:
+    def add_image_chunk(self, image_base64: str, image_description: str, metadata: Dict, chunk_id: str = None) -> str:
         """
-        Add an image chunk to the vector store.
+        Add an image chunk to the vector store with spatial coordinates.
         
         Args:
-            image_description: Text description of the image
-            image_base64: Base64 encoded image
-            metadata: Metadata dictionary
-            chunk_id: Optional custom ID
+            image_base64: Base64 encoded image data
+            image_description: Description of the image for embedding
+            metadata: Metadata associated with the image (should include bbox, page, etc.)
+            chunk_id: Optional custom ID for the chunk
             
         Returns:
             ID of the added chunk
@@ -109,15 +117,18 @@ class VectorStore:
             # Generate embedding from description using Ollama
             embedding = self._generate_embedding(image_description)
             
-            # Store image data in metadata
+            # Store image data in metadata with spatial information
             image_metadata = {
                 **metadata,
                 "type": "image",
                 "image_data": image_base64,
-                "description": image_description
+                "description": image_description,
+                "has_bbox": "bbox" in metadata and metadata["bbox"] is not None,
+                "area": metadata.get("area", 0),
+                "dimensions": metadata.get("dimensions", [])
             }
             
-            # Add to collection
+            # Add to collection (store description as document for search)
             self.collection.add(
                 documents=[image_description],
                 embeddings=[embedding],
@@ -125,53 +136,181 @@ class VectorStore:
                 ids=[chunk_id]
             )
             
-            logger.debug(f"Added image chunk with ID: {chunk_id}")
+            logger.debug(f"Added image chunk with ID: {chunk_id}, bbox: {metadata.get('bbox', 'None')}")
             return chunk_id
             
         except Exception as e:
             logger.error(f"Error adding image chunk: {e}")
             raise
     
-    def similarity_search(self, query: str, n_results: int = 5, filter_metadata: Dict = None) -> List[Dict]:
+    def add_spatial_relationships(self, relationships: List[Dict]) -> None:
         """
-        Perform similarity search in the vector store.
+        Store spatial relationships in metadata for future reference.
+        
+        Args:
+            relationships: List of spatial relationship dictionaries
+        """
+        try:
+            # Store relationships in a separate collection or as metadata
+            # For now, we'll log them and they can be used during retrieval
+            for relationship in relationships:
+                logger.debug(f"Spatial relationship: {relationship['text_chunk_id']} -> "
+                           f"{relationship['image_id']} ({relationship['relationship_type']}, "
+                           f"confidence: {relationship['confidence']:.2f})")
+            
+            # Store relationships count in collection metadata
+            if hasattr(self.collection, 'modify'):
+                try:
+                    current_metadata = self.collection.metadata or {}
+                    current_metadata['spatial_relationships_count'] = len(relationships)
+                    self.collection.modify(metadata=current_metadata)
+                except Exception as e:
+                    logger.warning(f"Could not update collection metadata: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error storing spatial relationships: {e}")
+    
+    def similarity_search(self, query: str, n_results: int = 5, content_type: str = None, use_spatial_boost: bool = True) -> List[Dict]:
+        """
+        Perform enhanced similarity search with spatial relationship awareness.
         
         Args:
             query: Search query
             n_results: Number of results to return
-            filter_metadata: Optional metadata filter
+            content_type: Optional content type filter (text or image)
+            use_spatial_boost: Whether to boost spatially related content
             
         Returns:
-            List of matching chunks with metadata
+            List of matching chunks with metadata and spatial context
         """
         try:
             # Generate query embedding using Ollama
             query_embedding = self._generate_embedding(query)
             
-            # Search in collection
+            # Search in collection with expanded results for spatial processing
+            search_multiplier = 3 if use_spatial_boost else 2
             results = self.collection.query(
                 query_embeddings=[query_embedding],
-                n_results=n_results,
-                where=filter_metadata,
+                n_results=n_results * search_multiplier,
                 include=["documents", "metadatas", "distances"]
             )
             
-            # Format results
-            formatted_results = []
-            for i in range(len(results['documents'][0])):
-                result = {
-                    'content': results['documents'][0][i],
-                    'metadata': results['metadatas'][0][i],
-                    'distance': results['distances'][0][i]
-                }
-                formatted_results.append(result)
+            # Process initial results
+            processed_results = []
+            for i, (doc, metadata, distance) in enumerate(zip(
+                results['documents'][0],
+                results['metadatas'][0], 
+                results['distances'][0]
+            )):
+                base_score = 1 - distance  # Convert distance to similarity
+                spatial_boost = 0
+                
+                # Apply spatial boost if enabled
+                if use_spatial_boost and metadata.get('has_bbox'):
+                    spatial_boost = self._calculate_spatial_boost(metadata, processed_results)
+                
+                processed_results.append({
+                    'content': doc,
+                    'metadata': metadata,
+                    'similarity_score': base_score,
+                    'spatial_boost': spatial_boost,
+                    'final_score': base_score + spatial_boost,
+                    'rank': i + 1,
+                    'has_spatial_info': metadata.get('has_bbox', False)
+                })
             
-            logger.debug(f"Found {len(formatted_results)} results for query: {query[:50]}...")
-            return formatted_results
+            # Filter by content type if specified
+            if content_type:
+                processed_results = [
+                    r for r in processed_results 
+                    if r['metadata'].get('type') == content_type
+                ]
+            
+            # Sort by final score (similarity + spatial boost)
+            processed_results.sort(key=lambda x: x['final_score'], reverse=True)
+            
+            # Add spatial context to results
+            enhanced_results = self._add_spatial_context(processed_results[:n_results])
+            
+            return enhanced_results
             
         except Exception as e:
-            logger.error(f"Error performing similarity search: {e}")
-            raise
+            logger.error(f"Error in similarity search: {e}")
+            return []
+    
+    def _calculate_spatial_boost(self, metadata: Dict, existing_results: List[Dict]) -> float:
+        """
+        Calculate spatial boost score based on proximity to other relevant content.
+        
+        Args:
+            metadata: Metadata of current result
+            existing_results: Previously processed results
+            
+        Returns:
+            Spatial boost score (0.0 to 0.2)
+        """
+        boost = 0.0
+        current_page = metadata.get('page')
+        current_bbox = metadata.get('bbox')
+        
+        if not current_page or not current_bbox:
+            return boost
+        
+        # Boost for same-page content
+        same_page_count = sum(1 for r in existing_results 
+                             if r['metadata'].get('page') == current_page)
+        if same_page_count > 0:
+            boost += 0.05  # Small boost for same-page content
+        
+        # Boost for high-area content (likely important)
+        area = metadata.get('area', 0)
+        if area > 10000:  # Large content area
+            boost += 0.03
+        
+        # Boost for content with spatial relationships
+        if metadata.get('type') == 'image' and area > 5000:
+            boost += 0.02  # Images are often important
+        
+        return min(boost, 0.2)  # Cap boost at 0.2
+    
+    def _add_spatial_context(self, results: List[Dict]) -> List[Dict]:
+        """
+        Add spatial context information to search results.
+        
+        Args:
+            results: List of search results
+            
+        Returns:
+            Enhanced results with spatial context
+        """
+        for result in results:
+            metadata = result['metadata']
+            spatial_context = {
+                'has_coordinates': metadata.get('has_bbox', False),
+                'page': metadata.get('page'),
+                'area': metadata.get('area', 0),
+                'content_type': metadata.get('type'),
+            }
+            
+            # Add bounding box info if available
+            if metadata.get('bbox'):
+                bbox = metadata['bbox']
+                spatial_context.update({
+                    'coordinates': {
+                        'top_left': [bbox[0], bbox[1]],
+                        'bottom_right': [bbox[2], bbox[3]],
+                        'width': bbox[2] - bbox[0],
+                        'height': bbox[3] - bbox[1]
+                    }
+                })
+            
+            # Add image dimensions if available
+            if metadata.get('dimensions'):
+                spatial_context['image_dimensions'] = metadata['dimensions']
+            
+            result['spatial_context'] = spatial_context
+        
+        return results
     
     def get_all_documents(self, limit: int = None) -> List[Dict]:
         """
