@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class OllamaClient:
     """Client for interacting with Ollama and Qwen2.5-VL model."""
     
-    def __init__(self, model_name: str = "qwen2.5-vl:7b", host: str = "http://localhost:11434"):
+    def __init__(self, model_name: str = "qwen2.5vl:7b", host: str = "http://localhost:11434"):
         self.model_name = model_name
         self.host = host
         self.client = ollama.Client(host=host)

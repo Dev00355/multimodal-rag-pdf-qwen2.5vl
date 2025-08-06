@@ -126,18 +126,33 @@ class VectorStore:
             if chunk_id is None:
                 chunk_id = str(uuid.uuid4())
             
-            # Generate embedding from description using Ollama
-            embedding = self._generate_embedding(image_description)
+            # Check if image has OCR-extracted text
+            extracted_text = metadata.get('extracted_text', '')
+            
+            # Create combined content for embedding (description + OCR text)
+            embedding_content = image_description
+            if extracted_text and extracted_text.strip():
+                embedding_content = f"{image_description}\n\nExtracted text: {extracted_text.strip()}"
+                logger.info(f"Image chunk includes OCR text: {len(extracted_text)} characters")
+            
+            # Generate embedding from combined content
+            embedding = self._generate_embedding(embedding_content)
             
             # Store image data in metadata with spatial information
             image_metadata = {
-                **{k: v for k, v in metadata.items() if k not in ["bbox", "dimensions"]},  # Exclude list values
+                **{k: v for k, v in metadata.items() if k not in ["bbox", "dimensions", "extracted_text"]},  # Exclude list values
                 "type": "image",
                 "image_data": image_base64,
                 "description": image_description,
                 "has_bbox": "bbox" in metadata and metadata["bbox"] is not None,
-                "area": metadata.get("area", 0)
+                "area": metadata.get("area", 0),
+                "has_ocr_text": bool(extracted_text and extracted_text.strip()),
+                "ocr_text_length": len(extracted_text) if extracted_text else 0
             }
+            
+            # Add OCR text to metadata if available
+            if extracted_text and extracted_text.strip():
+                image_metadata["extracted_text"] = extracted_text.strip()
             
             # Convert bbox to individual scalar values if present
             if "bbox" in metadata and metadata["bbox"] is not None:

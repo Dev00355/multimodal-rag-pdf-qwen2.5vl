@@ -16,7 +16,7 @@ A multimodal Retrieval-Augmented Generation (RAG) system that processes PDFs con
 2. **Install Ollama**: Download from [ollama.ai](https://ollama.ai)
 3. **Pull required models**:
    ```bash
-   ollama pull qwen2.5-vl:7b
+   ollama pull qwen2.5vl:7b
    ollama pull nomic-embed-text
    ```
 
@@ -32,7 +32,7 @@ A multimodal Retrieval-Augmented Generation (RAG) system that processes PDFs con
 3. Install and setup Ollama:
    ```bash
    # Install Ollama from https://ollama.ai
-   ollama pull qwen2.5-vl:7b
+   ollama pull qwen2.5vl:7b
    ```
 4. Start the system:
    ```bash

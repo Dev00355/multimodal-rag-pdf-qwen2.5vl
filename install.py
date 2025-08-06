@@ -110,7 +110,7 @@ def main():
     print("\n✅ Installation completed!")
     print("\n📋 Next steps:")
     print("1. Install Ollama: https://ollama.ai")
-    print("2. Pull Qwen2.5-VL model: ollama pull qwen2.5-vl:7b")
+    print("2. Pull Qwen2.5-VL model: ollama pull qwen2.5vl:7b")
     print("3. Run the system: python main.py")
     print("4. Visit: http://localhost:8000/docs")
 

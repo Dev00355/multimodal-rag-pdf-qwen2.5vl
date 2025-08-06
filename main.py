@@ -316,7 +316,7 @@ if __name__ == "__main__":
         stats = rag_system.get_system_stats()
         if not stats.get('ollama_model_available', False):
             logger.warning("⚠️  Qwen2.5-VL model not found!")
-            logger.warning("Please run: ollama pull qwen2.5-vl:7b")
+            logger.warning("Please run: ollama pull qwen2.5vl:7b")
             logger.warning("The API will start but queries will fail until the model is available.")
     except Exception as e:
         logger.error(f"Error checking system status: {e}")

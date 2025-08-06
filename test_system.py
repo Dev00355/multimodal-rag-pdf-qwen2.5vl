@@ -37,7 +37,7 @@ async def test_system():
     
     if not stats.get('ollama_model_available', False):
         print("\n⚠️  Qwen2.5-VL model not available!")
-        print("Please run: ollama pull qwen2.5-vl:7b")
+        print("Please run: ollama pull qwen2.5vl:7b")
         return
     
     # Test with sample PDF (if available)

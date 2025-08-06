@@ -60,7 +60,7 @@ def check_ollama():
                 print(f"✅ Qwen2.5-VL model: {qwen_models[0]}")
             else:
                 print("❌ Qwen2.5-VL model not found")
-                missing_models.append("qwen2.5-vl:7b")
+                missing_models.append("qwen2.5vl:7b")
             
             if nomic_models:
                 print(f"✅ Nomic Embed Text model: {nomic_models[0]}")
@@ -135,7 +135,7 @@ def main():
         print("1. Install Ollama: https://ollama.ai")
         print("2. Start Ollama service")
         print("3. Pull required models:")
-        print("   ollama pull qwen2.5-vl:7b")
+        print("   ollama pull qwen2.5vl:7b")
         print("   ollama pull nomic-embed-text")
         sys.exit(1)
     

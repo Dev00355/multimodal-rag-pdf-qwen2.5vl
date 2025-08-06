@@ -18,11 +18,11 @@ class MultimodalRAG:
     def __init__(self, 
                  persist_directory: str = "./chroma_db",
                  collection_name: str = "multimodal_rag",
-                 ollama_model: str = "qwen2.5-vl:7b",
+                 ollama_model: str = "qwen2.5vl:7b",
                  ollama_host: str = "http://localhost:11434"):
         
-        self.pdf_processor = PDFProcessor()
         self.ollama_client = OllamaClient(model_name=ollama_model, host=ollama_host)
+        self.pdf_processor = PDFProcessor(ollama_client=self.ollama_client)
         self.vector_store = VectorStore(persist_directory, collection_name, ollama_host)
         self.executor = ThreadPoolExecutor(max_workers=4)
         

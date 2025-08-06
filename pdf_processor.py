@@ -12,10 +12,12 @@ logger = logging.getLogger(__name__)
 class PDFProcessor:
     """Enhanced PDF processor that extracts text and images with spatial coordinates."""
     
-    def __init__(self):
+    def __init__(self, ollama_client=None):
         self.supported_image_formats = ['png', 'jpeg', 'jpg']
         self.min_text_length = 10  # Minimum text length for chunks
         self.proximity_threshold = 50  # Pixels for spatial relationships
+        self.ollama_client = ollama_client  # For OCR fallback
+        self.ocr_threshold = 50  # Minimum text length to consider OCR needed
     
     def process_pdf(self, pdf_path: str) -> Dict:
         """
@@ -75,10 +77,34 @@ class PDFProcessor:
         
         # Extract text with coordinates
         text_chunks = self._extract_text_with_coordinates(page, page_num)
+        
+        # Check if we need OCR fallback (minimal text extracted)
+        total_text_length = sum(len(chunk['content']) for chunk in text_chunks)
+        if total_text_length < self.ocr_threshold and self.ollama_client:
+            logger.info(f"Low text content ({total_text_length} chars) on page {page_num + 1}, attempting OCR fallback")
+            ocr_chunks = self._extract_text_with_ocr(page, page_num)
+            if ocr_chunks:
+                # Use OCR results if they provide more text
+                ocr_text_length = sum(len(chunk['content']) for chunk in ocr_chunks)
+                if ocr_text_length > total_text_length:
+                    logger.info(f"OCR extracted {ocr_text_length} chars vs {total_text_length} chars from regular extraction")
+                    text_chunks = ocr_chunks
+        
         page_data['text_chunks'] = text_chunks
         
         # Extract images with coordinates
         images = self._extract_images_with_coordinates(page, page_num)
+        
+        # Apply OCR to extracted images for additional text content
+        if self.ollama_client and images:
+            for image in images:
+                if 'base64' in image:
+                    ocr_text = self._extract_text_from_image_ocr(image['base64'])
+                    if ocr_text and len(ocr_text.strip()) > 10:
+                        # Add OCR text as metadata to the image
+                        image['extracted_text'] = ocr_text.strip()
+                        logger.info(f"Extracted {len(ocr_text)} chars from image on page {page_num + 1}")
+        
         page_data['images'] = images
         
         return page_data
@@ -389,3 +415,61 @@ class PDFProcessor:
         except Exception as e:
             logger.error(f"Error converting page {page_num} to image: {e}")
             raise
+    
+    def _extract_text_with_ocr(self, page: fitz.Page, page_num: int) -> List[Dict]:
+        """
+        Extract text from a PDF page using OCR when regular text extraction fails.
+        
+        Args:
+            page: PyMuPDF page object
+            page_num: Page number (0-indexed)
+            
+        Returns:
+            List of text chunks with coordinates
+        """
+        try:
+            # Convert page to image
+            mat = fitz.Matrix(2.0, 2.0)  # Higher resolution for better OCR
+            pix = page.get_pixmap(matrix=mat)
+            img_data = pix.tobytes("png")
+            
+            # Convert to base64 for OCR
+            img_base64 = base64.b64encode(img_data).decode()
+            
+            # Extract text using OCR
+            ocr_text = self.ollama_client.extract_image_text(img_base64)
+            
+            if ocr_text and len(ocr_text.strip()) > self.min_text_length:
+                # Get page dimensions for bounding box
+                rect = page.rect
+                
+                return [{
+                    'content': ocr_text.strip(),
+                    'page': page_num + 1,
+                    'bbox': [rect.x0, rect.y0, rect.x1, rect.y1],
+                    'block_index': 0,
+                    'type': 'ocr_text',
+                    'area': self._calculate_area([rect.x0, rect.y0, rect.x1, rect.y1])
+                }]
+            
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error performing OCR on page {page_num + 1}: {e}")
+            return []
+    
+    def _extract_text_from_image_ocr(self, image_base64: str) -> str:
+        """
+        Extract text from an image using OCR.
+        
+        Args:
+            image_base64: Base64 encoded image
+            
+        Returns:
+            Extracted text or empty string if extraction fails
+        """
+        try:
+            return self.ollama_client.extract_image_text(image_base64)
+        except Exception as e:
+            logger.error(f"Error extracting text from image: {e}")
+            return ""

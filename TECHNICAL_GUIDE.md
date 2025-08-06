@@ -180,7 +180,7 @@ def analyze_image(self, image_base64: str) -> str:
     5. Technical details if it's a diagram or workflow"""
     
     response = self.ollama_client.generate(
-        model="qwen2.5-vl:7b",
+        model="qwen2.5vl:7b",
         prompt=prompt,
         images=[image_base64]
     )
@@ -389,7 +389,7 @@ def answer_question(self, question: str, context_chunks: List[Dict], images: Lis
     """
     
     response = self.ollama_client.generate(
-        model="qwen2.5-vl:7b",
+        model="qwen2.5vl:7b",
         prompt=prompt,
         images=images  # Actual images sent to vision model
     )
