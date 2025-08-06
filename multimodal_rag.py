@@ -240,10 +240,23 @@ Extracted Text: {extracted_text}
                 
                 # Extract base64 images for vision model
                 image_base64_list = []
-                for img_result in image_results:
+                logger.debug(f"Processing {len(image_results)} image results for query")
+                
+                for i, img_result in enumerate(image_results):
                     img_data = img_result['metadata'].get('image_data')
-                    if img_data:
+                    page = img_result['metadata'].get('page', 'unknown')
+                    
+                    if not img_data:
+                        logger.warning(f"No image data found for image {i} from page {page}")
+                        continue
+                        
+                    if self._validate_base64_image(img_data):
                         image_base64_list.append(img_data)
+                        logger.debug(f"Added valid image {i} from page {page} (length: {len(img_data)})")
+                    else:
+                        logger.warning(f"Invalid image data found, skipping image {i} from page {page} (length: {len(img_data) if img_data else 0})")
+                
+                logger.info(f"Using {len(image_base64_list)} valid images out of {len(image_results)} found")
                 
                 # Combine results for context
                 combined_results = text_results + image_results
@@ -381,4 +394,32 @@ Extracted Text: {extracted_text}
             return self.vector_store.clear_collection()
         except Exception as e:
             logger.error(f"Error clearing database: {e}")
+            return False
+    
+    def _validate_base64_image(self, image_data: str) -> bool:
+        """
+        Validate that the image data is a proper base64 encoded string.
+        
+        Args:
+            image_data: Base64 encoded image string
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        try:
+            if not image_data or not isinstance(image_data, str):
+                return False
+                
+            # Check if it's a valid base64 string
+            import base64
+            base64.b64decode(image_data, validate=True)
+            
+            # Check minimum length (a valid image should be reasonably sized)
+            if len(image_data) < 100:  # Very small base64 strings are likely invalid
+                return False
+                
+            return True
+            
+        except Exception as e:
+            logger.debug(f"Invalid base64 image data: {e}")
             return False

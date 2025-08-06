@@ -133,11 +133,23 @@ Instructions:
 
 Answer:"""
 
-            # Include images if provided
+            # Validate and filter images if provided
+            valid_images = []
+            if images:
+                for i, img in enumerate(images):
+                    if self._validate_image_data(img):
+                        valid_images.append(img)
+                    else:
+                        logger.warning(f"Skipping invalid image data at index {i}")
+                
+                if images and not valid_images:
+                    logger.warning(f"All {len(images)} provided images were invalid, proceeding with text-only response")
+            
+            # Include images if provided and valid
             response = self.client.generate(
                 model=self.model_name,
                 prompt=prompt,
-                images=images if images else [],
+                images=valid_images,
                 stream=False
             )
             
@@ -217,3 +229,30 @@ Description:"""
         except Exception as e:
             logger.error(f"Error generating image description: {e}")
             return f"Error generating description: {str(e)}"
+    
+    def _validate_image_data(self, image_data: str) -> bool:
+        """
+        Validate that the image data is a proper base64 encoded string.
+        
+        Args:
+            image_data: Base64 encoded image string
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        try:
+            if not image_data or not isinstance(image_data, str):
+                return False
+                
+            # Check if it's a valid base64 string
+            base64.b64decode(image_data, validate=True)
+            
+            # Check minimum length (a valid image should be reasonably sized)
+            if len(image_data) < 100:  # Very small base64 strings are likely invalid
+                return False
+                
+            return True
+            
+        except Exception as e:
+            logger.debug(f"Invalid base64 image data: {e}")
+            return False

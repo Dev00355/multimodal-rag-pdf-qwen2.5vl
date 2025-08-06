@@ -180,16 +180,20 @@ class PDFProcessor:
                         img_pil.save(buffered, format="PNG")
                         img_base64 = base64.b64encode(buffered.getvalue()).decode()
                         
-                        images.append({
-                            'content': img_base64,
-                            'page': page_num + 1,
-                            'bbox': bbox,
-                            'image_index': img_index,
-                            'type': 'image',
-                            'format': 'png',
-                            'dimensions': [img_pil.width, img_pil.height],
-                            'area': self._calculate_area(bbox)
-                        })
+                        # Validate base64 data before storing
+                        if img_base64 and len(img_base64) > 100:  # Ensure valid, non-empty base64
+                            images.append({
+                                'content': img_base64,
+                                'page': page_num + 1,
+                                'bbox': bbox,
+                                'image_index': img_index,
+                                'type': 'image',
+                                'format': 'png',
+                                'dimensions': [img_pil.width, img_pil.height],
+                                'area': self._calculate_area(bbox)
+                            })
+                        else:
+                            logger.warning(f"Skipping invalid/empty image data on page {page_num + 1}, image {img_index}")
                     
                     pix = None  # Free memory
                     
